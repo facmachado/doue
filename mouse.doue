@@ -1,5 +1,6 @@
-§
-§ Comment test
-§
+#
+# Comment test
+#
 mousemove 400 600
+sleep 2
 mousemove 600 400

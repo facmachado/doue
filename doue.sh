@@ -22,7 +22,6 @@ fi
 #
 # Declare some consts
 #
-declare -ri REL_0=-2147483648
 EVEMU=$(command -v evemu-event)
 
 #
@@ -40,16 +39,10 @@ fi
 #
 # Declare more consts
 #
+declare -a fnls
+declare -ri REL_0=-2147483648
 EVENT=$(awk '/doued/,/event/ {a=$5} END {print a}' </proc/bus/input/devices)
 INPUT_DEVICE="/dev/input/$EVENT"
-
-function §() {
-  : "$@"
-}
-
-function wait() {
-  sleep "$1"
-}
 
 # -----------------------------------------------------------------------------
 
@@ -223,19 +216,23 @@ function mousezero() {
 
 #
 # Listing functions for parsing
+# shellcheck disable=SC2207
 #
-funcs=$(declare -F | cut -d' ' -f3)
+fnls=('#' 'sleep' $(declare -F | cut -d' ' -f3))
 
+#
+# Try to get file input, otherwise prompt
+#
 file=$(realpath "${1:-/dev/stdin}")
 
 #
-# Main prompt
+# Main loop
 #
-while read -r -p '% ' -a input; do
-  if grep "${input[0]}" <<<"$funcs" >/dev/null; then
-    eval "${input[@]}"
+while read -r -p '% ' -a line; do
+  if grep "${line[0]}" <<<"${fnls[@]}" >/dev/null; then
+    eval "${line[@]}"
   else
-    echo "error: invalid command '${input[0]}'"
+    echo "error: invalid command '${line[0]}'"
   fi
   sleep 0.01
 done <"$file" && echo
