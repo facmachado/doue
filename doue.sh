@@ -15,34 +15,34 @@
 # Checks user's permissions
 #
 if ! (id -Gn "$USER" | grep input) >/dev/null 2>&1 && ((UID != 0)); then
-  echo 'User not in the input group (or not root)' >&2
+  echo 'error: user not in the input group (or not root)' >&2
+  exit 1
+fi
+
+#
+# Check if evemu is installed and doued is running
+#
+EVEMU=$(command -v evemu-event)
+if [ ! "$EVEMU" ]; then
+  echo 'error: evemu or evemu-tools not installed' >&2
+  exit 1
+fi
+if [ ! -e "/tmp/doued.lock" ]; then
+  echo 'error: doued not running' >&2
   exit 1
 fi
 
 #
 # Declare some consts
 #
-EVEMU=$(command -v evemu-event)
-
-#
-# Check some dependencies
-#
-if [ ! "$EVEMU" ]; then
-  echo 'Error: evemu-tools not installed' >&2
-  exit 1
-fi
-if [ ! -e "/tmp/doued.lock" ]; then
-  echo 'Error: doued not running' >&2
-  exit 1
-fi
-
-#
-# Declare more consts
-#
-declare -a fnls
-declare -ri REL_0=-2147483648
-EVENT=$(awk '/doued/,/event/ {a=$5} END {print a}' </proc/bus/input/devices)
-INPUT_DEVICE="/dev/input/$EVENT"
+declare INPUT
+declare DEVICE
+declare -a CMDS
+declare -i REL_0
+REL_0=-2147483648
+DEVICE="/dev/input/$(
+  awk '/doued/,/event/ {a=$5} END {print a}' </proc/bus/input/devices
+)"
 
 # -----------------------------------------------------------------------------
 
@@ -95,6 +95,10 @@ function keycombo() {
       keypress "$9"
       keyup    "$8" "$7" "$6" "$5" "$4" "$3" "$2" "$1"
     ;;
+    *)
+      echo "syntax: keycombo <key_1> <key_2> [key_3] ... [key_9]" >&2
+      return 1
+    ;;
   esac
 }
 
@@ -108,7 +112,7 @@ function keydown() {
   local k
   if (($# < 10)); then
     for k in "$@"; do
-      "$EVEMU" "$INPUT_DEVICE" --type EV_KEY --code "$k" --value 1 --sync
+      "$EVEMU" "$DEVICE" --type EV_KEY --code "$k" --value 1 --sync
     done
   fi
 }
@@ -137,17 +141,25 @@ function keyup() {
   local k
   if (($# < 10)); then
     for k in "$@"; do
-      "$EVEMU" "$INPUT_DEVICE" --type EV_KEY --code "$k" --value 0 --sync
+      "$EVEMU" "$DEVICE" --type EV_KEY --code "$k" --value 0 --sync
     done
   fi
 }
 
+# -----------------------------------------------------------------------------
+
 #
 # Clicks with the specified mouse button
-# @param {string} button (2 = right; 3 = middle)
-# @param {number} times (2 = double click)
+# @param {string} button
+# @param {number} clicks
 #
 function mouseclick() {
+  if (($# != 2)); then
+    echo -e 'syntax: mouseclick <button> <clicks>\n' \
+    '       button: (1 = left; 2 = right; 3 = middle)\n' \
+    '       clicks: (1 = single; 2 = double)' >&2
+    return 1
+  fi
   for ((i=0; i<${2:-1}; i++)); do
     mousedown "$1"
     mouseup "$1"
@@ -156,9 +168,13 @@ function mouseclick() {
 
 #
 # Holds the specified mouse button
-# @param {string} button (2 = right; 3 = middle)
+# @param {string} button
 #
 function mousedown() {
+  if (($# != 1)); then
+    echo "syntax: mousedown <button> (1 = left; 2 = right; 3 = middle)" >&2
+    return 1
+  fi
   local b
   case "$1" in
     1) b=BTN_LEFT   ;;
@@ -166,7 +182,7 @@ function mousedown() {
     3) b=BTN_MIDDLE ;;
     *) return 0     ;;
   esac
-  "$EVEMU" "$INPUT_DEVICE" --type EV_KEY --code "$b" --value 1 --sync
+  "$EVEMU" "$DEVICE" --type EV_KEY --code "$b" --value 1 --sync
 }
 
 #
@@ -176,24 +192,36 @@ function mousedown() {
 # @param {number} y
 #
 function mousemove() {
+  if (($# != 2)); then
+    echo "syntax: mousemove <x> <y>" >&2
+    return 1
+  fi
   mousezero
-  "$EVEMU" "$INPUT_DEVICE" --type EV_REL --code REL_X --value $(($1 / 2))
-  "$EVEMU" "$INPUT_DEVICE" --type EV_REL --code REL_Y --value $(($2 / 2)) --sync
+  "$EVEMU" "$DEVICE" --type EV_REL --code REL_X --value $(($1 / 2))
+  "$EVEMU" "$DEVICE" --type EV_REL --code REL_Y --value $(($2 / 2)) --sync
 }
 
 #
-# Scrolls the mouse wheel (1 step = 3 lines; negative = down)
+# Scrolls the mouse wheel
 # @param {number} steps
 #
 function mousescroll() {
-  "$EVEMU" "$INPUT_DEVICE" --type EV_REL --code REL_WHEEL --value "$1" --sync
+  if (($# != 1)); then
+    echo "syntax: mousescroll <steps> (1 step = 3 lines; negative = down)" >&2
+    return 1
+  fi
+  "$EVEMU" "$DEVICE" --type EV_REL --code REL_WHEEL --value "$1" --sync
 }
 
 #
 # Releases the specified mouse button
-# @param {string} button (2 = right; 3 = middle)
+# @param {string} button
 #
 function mouseup() {
+  if (($# != 1)); then
+    echo "syntax: mouseup <button> (1 = left; 2 = right; 3 = middle)" >&2
+    return 1
+  fi
   local b
   case "$1" in
     1) b=BTN_LEFT   ;;
@@ -201,38 +229,39 @@ function mouseup() {
     3) b=BTN_MIDDLE ;;
     *) return 0     ;;
   esac
-  "$EVEMU" "$INPUT_DEVICE" --type EV_KEY --code "$b" --value 0 --sync
+  "$EVEMU" "$DEVICE" --type EV_KEY --code "$b" --value 0 --sync
 }
 
 #
-# Moves the mouse pointer to coord (0, 0)
+# Moves mouse pointer to coord (0, 0)
 #
 function mousezero() {
-  "$EVEMU" "$INPUT_DEVICE" --type EV_REL --code REL_X --value $REL_0
-  "$EVEMU" "$INPUT_DEVICE" --type EV_REL --code REL_Y --value $REL_0 --sync
+  "$EVEMU" "$DEVICE" --type EV_REL --code REL_X --value $REL_0
+  "$EVEMU" "$DEVICE" --type EV_REL --code REL_Y --value $REL_0 --sync
 }
 
-# -----------------------------------------------------------------------------
-
 #
-# Listing functions for parsing
+# Listing commands
 # shellcheck disable=SC2207
 #
-fnls=('#' 'sleep' $(declare -F | cut -d' ' -f3))
+CMDS=('#' 'echo' 'exit' 'sleep' $(declare -F | cut -d' ' -f3))
 
 #
-# Try to get file input, otherwise prompt
+# Prompt if file not given. If given, try to find it
 #
-file=$(realpath "${1:-/dev/stdin}")
+if [ "$1" ] && [ ! -f "$(realpath "$1")" ]; then
+  echo "error: $1 not found" >&2
+  exit 1
+fi
+INPUT=$(realpath "${1:-/dev/stdin}")
 
 #
-# Main loop
+# Our interpreter's main loop
 #
-while read -r -p '% ' -a line; do
-  if grep "${line[0]}" <<<"${fnls[@]}" >/dev/null; then
-    eval "${line[@]}"
-  else
-    echo "error: invalid command '${line[0]}'"
+while read -r -e -p '% ' -a line; do
+  if ! grep -q "${line[0]}" <<<"${CMDS[@]}"; then
+    echo "error: invalid command '${line[0]}'" >&2
+    continue
   fi
-  sleep 0.01
-done <"$file" && echo
+  eval "${line[@]}"
+done <"$INPUT"

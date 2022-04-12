@@ -1,6 +1,8 @@
 #
 # Comment test
 #
+echo start
 mousemove 400 600
 sleep 2
 mousemove 600 400
+echo end
