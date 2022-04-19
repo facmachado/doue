@@ -4,5 +4,7 @@
 echo start
 mousemove 400 600
 sleep 2
-mousemove 600 400
+mousemove 1400 700
+mouseclick 1 1
+keypress KEY_ENTER KEY_ENTER KEY_ENTER KEY_ENTER KEY_ENTER
 echo end

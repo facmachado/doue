@@ -44,8 +44,6 @@ DEVICE="/dev/input/$(
   awk '/doued/,/event/ {a=$5} END {print a}' </proc/bus/input/devices
 )"
 
-# -----------------------------------------------------------------------------
-
 #
 # Makes keys combinations (up to 9 keys).
 # The last key is the trigger
@@ -106,9 +104,13 @@ function keycombo() {
 # Holds the specified key(s) (up to 9 keys)
 # @param {string} key_1
 # ...
-# @param {string} key_n
+# @param {string} key_9
 #
 function keydown() {
+  if (($# < 1)); then
+    echo "syntax: keydown <key_1> [key_2] [key_3] ... [key_9]" >&2
+    return 1
+  fi
   local k
   if (($# < 10)); then
     for k in "$@"; do
@@ -118,26 +120,33 @@ function keydown() {
 }
 
 #
-# Presses and releases the specified key
-# @param {string} key
+# Presses and releases the specified key(s)
+# @param {string} key_1
+# ...
 #
 function keypress() {
-  local k
-  if (($# < 10)); then
-    for k in "$@"; do
-      keydown "$k"
-      keyup   "$k"
-    done
+  if (($# < 1)); then
+    echo "syntax: keypress <key_1> [key_2] [key_3] ..." >&2
+    return 1
   fi
+  local k
+  for k in "$@"; do
+    keydown "$k"
+    keyup   "$k"
+  done
 }
 
 #
 # Releases the specified key(s) (up to 9 keys)
 # @param {string} key_1
 # ...
-# @param {string} key_n
+# @param {string} key_9
 #
 function keyup() {
+  if (($# < 1)); then
+    echo "syntax: keyup <key_1> [key_2] [key_3] ... [key_9]" >&2
+    return 1
+  fi
   local k
   if (($# < 10)); then
     for k in "$@"; do
@@ -145,8 +154,6 @@ function keyup() {
     done
   fi
 }
-
-# -----------------------------------------------------------------------------
 
 #
 # Clicks with the specified mouse button
@@ -160,7 +167,7 @@ function mouseclick() {
     '       clicks: (1 = single; 2 = double)' >&2
     return 1
   fi
-  for ((i=0; i<${2:-1}; i++)); do
+  for ((i=0; i<$2; i++)); do
     mousedown "$1"
     mouseup "$1"
   done
